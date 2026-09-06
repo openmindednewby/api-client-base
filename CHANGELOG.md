@@ -1,44 +1,23 @@
 # Changelog
 
-## 1.0.0 — 2026-05-01
+All notable changes to `@dloizides/api-client-base` are documented here.
 
-Initial production release. Phase 1 of the Questioner / OnlineMenu product split.
+## [1.1.0] - 2026-09-06
 
-### Added
+### Fixed
+- **A write verb now declares AND carries JSON even with no body.** `buildHeaders` set
+  `Content-Type` only when a body was present, so a body-less `POST`/`PUT`/`PATCH`/`DELETE`
+  went out with no content type — the 415 trap. `buildBody` now returns `{}` for a body-less
+  write, because declaring JSON while carrying nothing is the same failure one step along
+  ("a non-empty request body is required").
 
-- **`ApiClient`** — realm-agnostic, product-agnostic fetch wrapper. Takes
-  `baseUrl`, `defaultHeaders`, `timeoutMs`, and an optional `getAccessToken`
-  callback. JSON-by-default request bodies (auto-stringified), pass-through for
-  `FormData` / `Blob` / `ArrayBuffer` / `URLSearchParams`. Throws `ApiError`
-  on non-2xx with envelope-extracted `status`, `code`, `message`, and `details`.
-- **`ApiError`** — `instanceof`-safe `Error` subclass carrying the normalised
-  envelope.
-- **Event bus** — `ApiEventBus` class + singleton `apiEventBus`. Typed event
-  union: `ToastEvent`, `ModalEvent`, `RedirectEvent`, `SessionExpiredEvent`,
-  `MaintenanceModeEvent`. Listener errors are silently swallowed so one broken
-  listener cannot affect others.
-- **Error registry** — declarative, priority-sorted rule store with the dozen
-  default rules used across the portfolio (feature-gated 403, maintenance 503,
-  session-expired 401, validation 400/422, conflict 409, rate-limited 429,
-  bad-gateway 502/504, server 5xx with monitoring, network-offline,
-  request-timeout). `setLoginRedirectPath` overrides the session-expired
-  redirect target.
-- **Matcher** — `matchError`, `matchesRule`, `matchesStatus` (number | array |
-  range), `matchesPath` (string substring | RegExp), `matchesMethod`.
-- **Pure classifier** — `classifyAxiosError(AxiosErrorLike)` produces a
-  `ClassifiedError` from a duck-typed error. No `axios` dependency.
-- **Pure helpers** — `extractErrorCode`, `extractErrorMessage`,
-  `extractRequestId`, `isRecord`.
-- **Const enums** — `HttpMethod`, `ErrorActionType`, `ErrorSeverity` each in
-  their own file (per the portfolio module-structure convention).
+  Runtime-typed bodies (FormData / Blob / ArrayBuffer / URLSearchParams) are unchanged and
+  are never stamped — the runtime must set `multipart/form-data` plus the boundary itself.
 
-### Tests
+  This mirrors the guard in `@dloizides/bff-web-client` v1.3.0, which hit the same class for
+  a different reason (axios strips `Content-Type` when `data` is undefined). Two tests that
+  asserted `body === undefined` for a body-less POST were asserting the defect and have been
+  corrected.
 
-- 116 unit tests, **100% statements / branches / functions / lines**.
-- ESLint zero-warnings under `@typescript-eslint/recommended-requiring-type-checking`
-  and `sonarjs/recommended-legacy`.
+  See `BaseClient/docs/code-standards/evidence-and-gates.md`.
 
-### Composition
-
-The package never imports `@dloizides/auth-client`. The two pair through the
-`getAccessToken` callback, keeping them composable rather than coupled.

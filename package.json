@@ -1,6 +1,6 @@
 {
   "name": "@dloizides/api-client-base",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "Realm-agnostic, product-agnostic HTTP plumbing for the dloizides.com portfolio: fetch wrapper with bearer-token injection via callback, error envelope mapping, declarative error registry, typed event bus. Pairs with @dloizides/auth-client by composition, never imports it.",
   "keywords": [
     "fetch",
