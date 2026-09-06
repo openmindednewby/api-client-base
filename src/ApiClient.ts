@@ -21,6 +21,8 @@ import type { ApiClientConfig } from './types/ApiClientConfig';
 const DEFAULT_TIMEOUT_MS = 15000;
 const NO_CONTENT_STATUS = 204;
 const JSON_CONTENT_TYPE = 'application/json';
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const EMPTY_JSON_BODY = '{}';
 const FALLBACK_REQUEST_FAILED = 'Request failed';
 
 /** Per-request options accepted by {@link ApiClient.request} family. */
@@ -102,7 +104,7 @@ export class ApiClient {
     const url = joinPath(this.baseUrl, options.path);
     const method = (options.method ?? 'GET').toUpperCase();
     const headers = await this.buildHeaders(options);
-    const body = this.buildBody(options.body);
+    const body = this.buildBody(options.body, method);
 
     const init: RequestInit = { method, headers, signal: options.signal };
     if (body !== undefined) {init.body = body;}
@@ -158,20 +160,33 @@ export class ApiClient {
     return this.request<T>({ ...(options ?? ({} as ApiVerbOptions)), path, method: 'DELETE' });
   }
 
-  private buildBody(body: unknown): BodyInit | undefined {
-    if (body === undefined || body === null) {
-      return undefined;
+  private buildBody(body: unknown, method: string): BodyInit | undefined {
+    // A write that declares JSON must CARRY JSON. An empty body with a JSON content type is
+    // rejected ("a non-empty request body is required"), which is the same 415/400 class one
+    // step along. Matches @dloizides/bff-web-client's writeContentTypeGuard exactly.
+    const isBodyless = body === undefined || body === null;
+    let serialised: BodyInit | undefined;
+    if (isBodyless) {
+      serialised = WRITE_METHODS.has(method) ? EMPTY_JSON_BODY : undefined;
+    } else {
+      serialised = isJsonBodyCandidate(body) ? JSON.stringify(body) : (body as BodyInit);
     }
-    const serialised: BodyInit = isJsonBodyCandidate(body)
-      ? JSON.stringify(body)
-      : (body as BodyInit);
     return serialised;
   }
 
   private async buildHeaders(options: ApiRequestOptions): Promise<Record<string, string>> {
     const merged: Record<string, string> = {};
-    const isJson = isJsonBodyCandidate(options.body);
-    if (isJson) {merged['Content-Type'] = JSON_CONTENT_TYPE;}
+    // A write declares JSON even with NO body. Setting this only when a body is present is
+    // the 415 trap: a body-less POST goes out with no content type and the server rejects it.
+    // (The axios-based sibling @dloizides/bff-web-client has the same class of defect for a
+    // different reason — axios actively STRIPS the header when data is undefined. See
+    // writeContentTypeGuard.ts there.) Runtime-typed bodies (FormData/Blob/…) must NOT be
+    // stamped: the runtime supplies multipart + boundary itself.
+    const isWrite = WRITE_METHODS.has((options.method ?? 'GET').toUpperCase());
+    const isRuntimeTyped = options.body !== undefined && options.body !== null && !isJsonBodyCandidate(options.body);
+    if (isJsonBodyCandidate(options.body) || (isWrite && !isRuntimeTyped)) {
+      merged['Content-Type'] = JSON_CONTENT_TYPE;
+    }
     Object.assign(merged, this.config.defaultHeaders ?? {});
 
     if (options.skipAuth !== true && this.config.getAccessToken !== undefined) {

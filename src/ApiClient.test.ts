@@ -189,7 +189,10 @@ describe('ApiClient', () => {
       const c = new ApiClient({ baseUrl: 'https://x' });
       await c.post('/x', null);
       const init = calls[0]?.init;
-      expect(init?.body).toBeUndefined();
+      // A WRITE with no body still carries an empty JSON body. Asserting `undefined` here is
+      // asserting the 415: the server rejects a POST that declares JSON and carries nothing.
+      // Reads are unaffected -- see the GET case below.
+      expect(init?.body).toBe('{}');
       restore();
     });
 
@@ -342,7 +345,11 @@ describe('ApiClient', () => {
       const c = new ApiClient({ baseUrl: 'https://x' });
       await c.post('/x');
       expect(calls[0]?.init.method).toBe('POST');
-      expect(calls[0]?.init.body).toBeUndefined();
+      // See above: a body-less write must still declare AND carry JSON.
+      expect(calls[0]?.init.body).toBe('{}');
+      expect((calls[0]?.init.headers as Record<string, string>)['Content-Type']).toBe(
+        'application/json',
+      );
       restore();
     });
   });
